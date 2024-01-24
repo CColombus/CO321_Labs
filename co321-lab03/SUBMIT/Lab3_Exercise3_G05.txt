@@ -1,0 +1,10 @@
+Maximum available pre-scaler is /1024 ,
+
+    Time taken for single increment with /1024 pre-scaler = 1024/16 microseconds
+
+TIMER0 only has 8bits thus the maximum value it can store is 255.
+Adittionaly we need one more increment for the overflow to happen
+
+    Maximum delay by using TIMER0   = 1024/16 * 256
+                                    = 16384 microseconds
+                                    = 16.384 miliseconds

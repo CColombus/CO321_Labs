@@ -1,0 +1,46 @@
+#include <avr/io.h>
+#include <util/delay.h>
+
+#define DEBOUNCE_DELAY_MS 100
+
+int main(void)
+{
+    volatile uint8_t button_flag = 0; // Flag to identify unique button presses
+    
+    // Set PIND2 as an input
+    DDRD &= ~(1 << PD2);
+    
+    // Set all pins on PORTB for output
+    DDRB = 0xFF;
+    
+    // Reset all outputs of PORTB to off
+    PORTB = 0x00;
+
+    while (1)
+    {
+        // Check if the button is pressed and the flag is not set
+        if ((PIND & (1 << PD2)) && !button_flag)
+        {
+            _delay_ms(DEBOUNCE_DELAY_MS);   
+            // Check again if the button is still pressed (debounce)
+            if (PIND & (1 << PD2))
+            {
+                button_flag = 1; // Set flag to avoid multiple registrations
+                PORTB++;    // Increment PORTB
+            }
+        }
+
+        // Check if the button is not pressed and the flag is set
+        if (!(PIND & (1 << PD2)) && button_flag)
+        {
+            _delay_ms(DEBOUNCE_DELAY_MS);
+            // Check again if the button is still released (debounce)
+            if (!(PIND & (1 << PD2)))
+            {
+                button_flag = 0; // Reset the flag to accept the next unique button press
+            }
+        }
+    }
+
+    return 0;
+}

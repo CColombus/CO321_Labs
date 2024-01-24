@@ -1,0 +1,300 @@
+// Headers
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <Keypad.h>
+#include <util/delay.h>
+#include <lcd.h>
+#include <eeprom.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+// Prototypes
+void Timer0_Setup(void);
+ISR(TIMER0_COMP_vect);
+void lcd_scroll(int line, char *str, char *static_str);
+void Encrypt();
+void ChangeSecret();
+char ceaser_cipher(char ch, int key);
+
+int main(void)
+{
+	// Variables
+	volatile char key = Key_None; // IMPORTANT - If used with interrupt debouncing, must be volatile.
+
+	// Setup
+	KP_Setup();		// Setup keypad
+	Timer0_Setup(); // Setup timer0 to call interrupt every 1ms @ Fclk = 8MHz
+	sei();
+
+	/* initialize display, cursor off */
+	lcd_init(LCD_DISP_ON);
+	lcd_clrscr();
+
+	lcd_scroll(0, "Welcome to CeaserCipher V1.0!", "Choose action-~");
+
+	lcd_puts("1. Encrypt\n2. Change secret");
+
+	// Loop
+	while (1)
+	{
+		lcd_gotoxy(0, 0);
+		lcd_puts("1. Encrypt\n2. Change Secret");
+
+		// Read key value from ISR sequence
+		key = KP_GetKeyISR();
+
+		// If key is pressed
+		if (key != Key_None)
+		{
+			if (key == '1')
+			{
+				// Wait until key is released
+				KP_WaitReleaseISR();
+				Encrypt();
+			}
+			if (key == '2')
+			{
+				// Wait until key is released
+				KP_WaitReleaseISR();
+				ChangeSecret();
+			}
+			if (key == '*')
+			{
+				// Wait until key is released
+				KP_WaitReleaseISR();
+				lcd_clrscr();
+				lcd_scroll(0, "CeaserCipher V1.0 developed by Chamath Colombage", ":)");
+			}
+
+			// Wait until key is released
+			KP_WaitReleaseISR();
+		}
+	}
+
+	return 0;
+}
+
+// Encrypt plaintext
+void Encrypt()
+{
+	lcd_clrscr();
+	lcd_puts("Ent Plaintext:\n");
+
+	char secret_txt[3];
+	secret_txt[2] = '\0';
+	EEPROM_read_batch(100, secret_txt, 3);
+	int secret = atoi(secret_txt);
+
+	char plaintext[17] = "\0";
+
+	uint8_t idx = 0;
+	volatile char key = Key_None; // IMPORTANT - If used with interrupt debouncing, must be volatile.
+
+	while (1)
+	{
+		// Read key value from ISR sequence
+		key = KP_GetKeyISR();
+
+		// If key is pressed
+		if (key != Key_None)
+		{
+			if ((idx < 16) & ((key == 'A') | (key == 'B') | (key == 'C') | (key == 'D')))
+			{
+				plaintext[idx] = key;
+				idx++;
+			}
+			else if (key == '*')
+			{
+				if (idx > 0)
+					idx--;
+				plaintext[idx] = '\0';
+			}
+			else if (key == '#')
+			{
+				// Wait until key is released
+				KP_WaitReleaseISR();
+
+				// Encrypt
+				char ciphertext[17] = "\0";
+				for (uint8_t i = 0; i < strlen(plaintext); i++)
+				{
+					ciphertext[i] = ceaser_cipher(plaintext[i], secret);
+				}
+
+				lcd_clrscr();
+				lcd_puts("Cipher text:\n");
+				lcd_puts(ciphertext);
+
+				while (1)
+				{
+					// Read key value from ISR sequence
+					key = KP_GetKeyISR();
+
+					// If key is pressed
+					if (key != Key_None)
+					{
+						if (key == '#')
+						{
+							// Wait until key is released
+							KP_WaitReleaseISR();
+							lcd_clrscr();
+							break;
+						}
+					}
+				}
+
+				lcd_clrscr();
+				break;
+			}
+
+			// Wait until key is released
+			KP_WaitReleaseISR();
+
+			lcd_clrscr();
+			lcd_puts("Ent Plaintext:\n");
+			lcd_puts(plaintext);
+		}
+	}
+}
+
+// ceaser cipher function to cipher alphabetic ascii characters
+char ceaser_cipher(char ch, int key)
+{
+	if (ch >= 'a' && ch <= 'z')
+	{
+		ch = ch + key;
+		if (ch > 'z')
+		{
+			ch = ch - 'z' + 'a' - 1;
+		}
+		return ch;
+	}
+	else if (ch >= 'A' && ch <= 'Z')
+	{
+		ch = ch + key;
+		if (ch > 'Z')
+		{
+			ch = ch - 'Z' + 'A' - 1;
+		}
+		return ch;
+	}
+	else
+	{
+		return ch;
+	}
+}
+
+// Change secret
+void ChangeSecret()
+{
+	lcd_clrscr();
+	lcd_puts("Enter secret:\n");
+
+	char secret[3];
+	secret[2] = '\0';
+	EEPROM_read_batch(100, secret, 3);
+	lcd_puts(secret);
+
+	uint8_t idx = strlen(secret);
+
+	volatile char key = Key_None; // IMPORTANT - If used with interrupt debouncing, must be volatile.
+
+	while (1)
+	{
+		// Read key value from ISR sequence
+		key = KP_GetKeyISR();
+
+		// If key is pressed
+		if (key != Key_None)
+		{
+			if ((key >= 48) & (key <= 57) & (idx < 2))
+			{
+				secret[idx] = key;
+				idx++;
+			}
+			else if (key == '*')
+			{
+				if (idx > 0)
+					idx--;
+				secret[idx] = '\0';
+			}
+			else if (key == '#')
+			{
+				// Wait until key is released
+				KP_WaitReleaseISR();
+
+				if ((atoi(secret) < 26) & (atoi(secret) > 0))
+				{
+					EEPROM_update_batch(100, secret, 3);
+					lcd_clrscr();
+					lcd_puts("Secret changed!\n");
+					lcd_puts("New secret: ");
+					char test[3];
+					test[2] = '\0';
+					EEPROM_read_batch(100, test, 3);
+					lcd_puts(test);
+					_delay_ms(1000);
+					lcd_clrscr();
+					break;
+				}
+				else
+				{
+					lcd_clrscr();
+					lcd_scroll(1, "Secret should be less than 26.", "Invalid secret!");
+				}
+			}
+
+			// Wait until key is released
+			KP_WaitReleaseISR();
+
+			lcd_clrscr();
+			lcd_puts("Enter secret:\n");
+
+			lcd_puts(secret);
+		}
+	}
+}
+
+// Scroll text on LCD
+void lcd_scroll(int line, char *str, char *static_str)
+{
+	char blank[16] = "                ";
+	uint8_t len = strlen(str) + 16;
+	char pad_str[len];
+	strcpy(pad_str, str);
+	strcat(pad_str, blank);
+
+	lcd_clrscr();
+	for (uint8_t i = 0; i <= len - 16; i++)
+	{
+		lcd_gotoxy(0, line);
+		for (uint8_t j = 0; j < 16; j++)
+		{
+			int pos = (j + i) % len;
+			lcd_putc(pad_str[pos]);
+		}
+
+		lcd_gotoxy(0, line ? 0 : 1);
+		lcd_puts(static_str);
+		_delay_ms(200);
+	}
+	lcd_clrscr();
+}
+
+// Timer0 setup
+void Timer0_Setup(void)
+{
+	OCR0A = 124;
+	TCNT0 = 0;
+	BitSet(TCCR0A, WGM01);
+	BitSet(TCCR0B, CS01);
+	BitSet(TCCR0B, CS00);
+	BitSet(TIMSK0, OCIE0A);
+}
+
+// Timer0 interrupt service routine
+ISR(TIMER0_COMPA_vect)
+{
+	KP_ISR();
+}

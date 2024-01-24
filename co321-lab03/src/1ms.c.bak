@@ -1,0 +1,47 @@
+#include <avr/io.h>
+
+#define BLINK_DELAY 1000
+
+void delay_1ms()
+{
+    // We need 250 increments to get 1ms under 4us increment segements(1:64 pre-scaler)
+    TCNT0 = 6; // Reset TIMER0 Counter to 131
+
+    TCCR0A = 0x00; // Set normal mode
+    TCCR0B = 0x03; // Set clock source no pre-scale
+
+    while ((TIFR0 & 0x01) == 0)
+    {
+        // stuck in while loop until timer ovrflow flag
+    }
+
+    TCCR0A = 0x00; // Set normal mode
+    TCCR0B = 0x00; // Set no source to disable counter
+
+    TIFR0 = 0x01; // Manually clear the TOV0 flag
+}
+
+void delay(uint16_t time)
+{
+    for (uint16_t i = 0; i < time; i++)
+    {
+        delay_1ms();
+    }
+}
+
+int main()
+{
+    DDRB |= 0x3F; // Set PORTB as an output
+
+    PORTB = 0x00; // Reset all outputs of PORTB to off
+
+    while (1)
+    {
+        PORTB = PORTB | (1 << PB0); // Toggle PB0
+        delay(BLINK_DELAY);
+        PORTB = PORTB & ~(1 << PB0); // Toggle PB0
+        delay(BLINK_DELAY);
+    }
+
+    return 0;
+}
