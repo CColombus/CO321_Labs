@@ -1,0 +1,30 @@
+#include <avr/io.h>
+#include <util/delay.h>
+#include <uart.h>
+#include <eeprom.h>
+
+int main(void)
+{
+
+    usart_init();
+
+    usart_send_string("Currently saved message in eeprom:");
+
+    char saved_msg[100];
+    EEPROM_read_batch(200, saved_msg, 100);
+    usart_send_string(saved_msg);
+
+    usart_send_string("\nEnter a new message to save into eeprom:");
+
+    char new_msg[100];
+    usart_receive_string(new_msg);
+
+    EEPROM_update_batch(200, new_msg, 100);
+
+    usart_send_string("Message successfully saved!\nPLEASE RESET THE ARDUINO...");
+
+    while (1)
+    {
+        /* code */
+    }
+}
